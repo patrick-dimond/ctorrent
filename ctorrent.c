@@ -14,6 +14,8 @@
 
 #include <sys/queue.h>
 
+#include <sys/stat.h>
+
 #include <netinet/in.h>
 
 #include <sys/types.h>
@@ -29,9 +31,13 @@ extern int optopt;
 extern int opterr;
 extern int optreset;
 
+const uint8_t BASE_TEN = 0;
+/* Change log mode to be something better */
+const mode_t LOG_MODE = S_IWUSR; 
+
 void usage(void) {
   
-  printf("usage: ctorrent [-d] [-p port] [-l logfile] directory\n");
+  printf("usage: ctorrent [-d] [-p port] [-l logfile]\n");
   exit(1);
 
 }
@@ -39,9 +45,10 @@ void usage(void) {
 int main(int argc, char *argv[]) {
 
   
-  int daemonize = 0;
-  int port = 0;
-  int option;
+  uint8_t daemonize = 0;
+  uint32_t port = 0;
+  int32_t option;
+  int32_t log_fd = -1;
 
   if (argc < 2) {
     usage();
@@ -53,23 +60,49 @@ int main(int argc, char *argv[]) {
         daemonize = 1;
         break;
       case 'p':
-        /* convert optarg to a integer - check for errors and save it as the
-         * port
-         */
-        port = 1;
+        port = strtol(optarg, NULL, BASE_TEN);
+        if (port == 0) {
+          if (errno == EINVAL || errno == ERANGE) {
+            printf("Bad port\n");
+            usage();
+          }
+        }
         break;
       case 'l':
-        /* Set STDOUT and STDERR to now be the logfile? */
+        /* Does not following symlinks matter? What about using non block? */
+        log_fd = open(optarg, O_WRONLY | O_APPEND | O_NOFOLLOW | O_CREAT |
+            O_NONBLOCK, LOG_MODE);
+        if (log_fd == -1) {
+          err(errno, "Bad logfile - %s", optarg);
+        }
+
         break;
       case '?':
       default:
         usage();
     }
   }
+  argc -= optind;
+  argv += optind;
 
-  /* Check for remaining options - should just be the directory. The directory
-   * could also probably just be a default
-   */
+  if (argc != 0) {
+    usage();
+  }
+
+  if (log_fd != -1) {
+    /* Set STDOUT and STDERR to now be the logfile */
+    /* Leave STDIN for now - should that be closed? */
+    if (dup2(log_fd, STDOUT_FILENO) == -1) {
+        err(errno, "dup2");
+      }
+    if (dup2(log_fd, STDERR_FILENO) == -1) {
+      err(errno, "dup2");
+    }
+  }
+  /* TODO: confirm daemon works correctly with file descriptors */
+  if (daemon(1, 0) == -1 ) { 
+    err(errno, "daemon error");
+  }
 
   return 0;
 }
