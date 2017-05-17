@@ -1,7 +1,7 @@
 PROG=ctorrent
 CC=gcc
 SRCS=ctorrent.c
-CFLAGS+=-Wall -Werror -levent
+CFLAGS+=-Wall -Werror -levent -Wno-deprecated-declarations
 MAN=
 
 
