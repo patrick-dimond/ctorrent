@@ -21,6 +21,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <netdb.h>
 
 #include <fcntl.h>
@@ -39,12 +40,6 @@ const mode_t LOG_MODE = S_IWUSR;
 
 struct fd_comm {
 
-  /* http://www.wangafu.net/~nickm/libevent-book/Ref6_bufferevent.html 
-   * Managing the bufferevent - important bits include
-   * Changing the read / write event
-   * Turning on / off the read/ write event
-   */
-
   struct bufferevent *bufev;
 
   struct event *read_event;
@@ -52,14 +47,34 @@ struct fd_comm {
 
 };
 
-void usage(void) {
+void 
+usage(void) {
   
   printf("usage: ctorrent [-d] [-p port] [-l logfile]\n");
   exit(1);
 
 }
 
-struct fd_comm *alloc_fd_comm(struct event_base *base, evutil_socket_fd fd) {
+void 
+read_callback(struct bufferevent *bufev, void *ctx) {
+    //struct fd_comm *comm = ctx;
+    char buf[1024];
+    int32_t n;
+
+    while ((n = bufferevent_read(bufev, buf, sizeof(buf))) > 0) {
+
+      /* is this off by one? */
+      buf[n] = '\0'; 
+
+      printf("%s", buf);
+
+
+    }
+
+}
+
+struct fd_comm *
+alloc_fd_comm(struct event_base *base, evutil_socket_t fd) {
 
   struct fd_comm *comm = malloc(sizeof(struct fd_comm));
 
@@ -67,13 +82,32 @@ struct fd_comm *alloc_fd_comm(struct event_base *base, evutil_socket_fd fd) {
     return NULL;
   }
 
-  comm->read = evbuffer_new();
-  
+  comm->bufev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
 
-  comm->write = evbuffer_new();
+  if (comm->bufev == NULL) {
+    free(comm);
+    return NULL;
+  }
 
+  bufferevent_setcb(comm->bufev, read_callback, NULL, NULL, comm);
 
+  bufferevent_enable(comm->bufev, EV_READ);
 
+  return comm;
+
+}
+
+void
+free_fd_comm(struct fd_comm *comm) {
+
+  /* bufferevent free only frees if all callbacks are done - Will need to make
+   * sure callbacks are done before freeing comm 
+   */
+  bufferevent_free(comm->bufev);
+
+  free(comm);
+
+  return;
 
 }
 
@@ -91,15 +125,13 @@ do_accept(evutil_socket_t listener, short event, void *arg) {
     } else {
         struct fd_comm *comm;
         evutil_make_socket_nonblocking(fd);
-        comm = alloc_fd_state(base, fd);
-        assert(state); /*XXX err*/
-        assert(state->write_event);
-        event_add(state->read_event, NULL);
+        comm = alloc_fd_comm(base, fd);
     }
 }
 
 
-void run(uint32_t port) {
+void 
+run(uint32_t port) {
   
   evutil_socket_t listener;
   struct sockaddr_un local;
@@ -114,9 +146,11 @@ void run(uint32_t port) {
 
   /* TODO path needs to be generated - probably some checking to do too */
   strcpy(local.sun_path, "/Users/psd/Documents/ctorrent/ctorsock");
+  /* Giving an error
   if (unlink(local.sun_path) == -1) {
     err(errno, "unlink");
   }
+  */
 
   len = strnlen(local.sun_path, 108) + sizeof(local.sun_family);
 
@@ -153,7 +187,8 @@ void run(uint32_t port) {
 }
 
 
-int main(int argc, char *argv[]) {
+int 
+main(int argc, char *argv[]) {
 
   
   uint8_t daemonize = 0;
@@ -214,13 +249,16 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  run();
+  run(port);
 
   return 0;
 }
 
 
 /* Thoughts
- * Do I care enought to only use err or perror? Does it matter?
  * I should make it work with ipv4 and ipv6 - welcome to the future
+ * Will need bufferevent timeouts !
+ * void bufferevent_set_timeouts(struct bufferevent *bufev,
+    const struct timeval *timeout_read, const struct timeval *timeout_write);
+    The event callback is then invoked with either BEV_EVENT_TIMEOUT|BEV_EVENT_READING or BEV_EVENT_TIMEOUT|BEV_EVENT_WRITING.
  */
