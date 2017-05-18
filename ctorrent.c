@@ -37,15 +37,27 @@ const uint8_t BASE_TEN = 0;
 /* TODO Change log mode to be something better */
 const mode_t LOG_MODE = S_IWUSR; 
 
+/* handle parsing commands from local socket */
+struct command {
+  char buf[1024]; // build the command
+  int32_t comm_len; // reported length
+  int32_t cur_len; // current length
+  uint8_t status; // still handling a command?
+
+};
 
 struct fd_comm {
 
   struct bufferevent *bufev;
 
+  struct command comm;
+
   struct event *read_event;
   struct event *write_event;
 
 };
+
+void free_fd_comm(struct fd_comm *);
 
 void 
 usage(void) {
@@ -56,21 +68,48 @@ usage(void) {
 }
 
 void 
-read_callback(struct bufferevent *bufev, void *ctx) {
-    //struct fd_comm *comm = ctx;
-    char buf[1024];
+local_command(struct bufferevent *bufev, void *ctx) {
+    struct fd_comm *comm = ctx;
     int32_t n;
 
-    while ((n = bufferevent_read(bufev, buf, sizeof(buf))) > 0) {
+    while ((n = bufferevent_read(bufev, comm->comm.buf, sizeof(comm->comm.buf))) > 0) {
 
-      /* is this off by one? */
-      buf[n] = '\0'; 
+      if (comm->comm.status == 0) { // New Command
 
-      printf("%s", buf);
+      } else { // part way through getting a command
 
+
+      }
+
+      comm->comm.buf[n] = '\0'; 
+
+      printf("%s", comm->comm.buf);
 
     }
 
+}
+
+void 
+local_event(struct bufferevent *bev, short events, void *ctx) {
+
+    struct fd_comm *comm = ctx;
+    int finished = 0;
+
+    if (events & BEV_EVENT_EOF) {
+      printf("EOF received from local sock\n");
+      finished = 1;
+    }
+    if (events & BEV_EVENT_ERROR) {
+      printf("Error on local sock\n");
+      finished = 1;
+    }
+    if (events & BEV_EVENT_TIMEOUT) {
+      printf("Timeout on local sock\n");
+      finished = 1;
+    }
+    if (finished) {
+        free_fd_comm(comm);
+    }
 }
 
 struct fd_comm *
@@ -82,6 +121,9 @@ alloc_fd_comm(struct event_base *base, evutil_socket_t fd) {
     return NULL;
   }
 
+  comm->comm.status = 0;
+  comm->comm.cur_len = 0;
+
   comm->bufev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
 
   if (comm->bufev == NULL) {
@@ -89,7 +131,7 @@ alloc_fd_comm(struct event_base *base, evutil_socket_t fd) {
     return NULL;
   }
 
-  bufferevent_setcb(comm->bufev, read_callback, NULL, NULL, comm);
+  bufferevent_setcb(comm->bufev, local_command, NULL, local_event, comm);
 
   bufferevent_enable(comm->bufev, EV_READ);
 
@@ -100,9 +142,9 @@ alloc_fd_comm(struct event_base *base, evutil_socket_t fd) {
 void
 free_fd_comm(struct fd_comm *comm) {
 
-  /* bufferevent free only frees if all callbacks are done - Will need to make
-   * sure callbacks are done before freeing comm 
-   */
+  /* Remove all callbacks to free safely */
+  bufferevent_setcb(comm->bufev, NULL, NULL, NULL, NULL);
+
   bufferevent_free(comm->bufev);
 
   free(comm);
@@ -261,4 +303,10 @@ main(int argc, char *argv[]) {
  * void bufferevent_set_timeouts(struct bufferevent *bufev,
     const struct timeval *timeout_read, const struct timeval *timeout_write);
     The event callback is then invoked with either BEV_EVENT_TIMEOUT|BEV_EVENT_READING or BEV_EVENT_TIMEOUT|BEV_EVENT_WRITING.
+
+    CLean up everything before starting to contact the torrent server
+      - Start moving everything into separate c files
+      - better make file
+      - clean up all comments
+    write tests + a design doc
  */
