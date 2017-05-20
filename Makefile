@@ -4,11 +4,11 @@ CFLAGS+=-Wall -Werror
 export CC CFLAGS 
 
 all: 
-	@$(MAKE) -c src/daemon
-	@$(MAKE) -c src/cli
+	@$(MAKE) -C src/daemon
+	@$(MAKE) -C src/cli
 
 .PHONY: clean
 clean:	
-	@$(MAKE) -c src/daemon clean
-	@$(MAKE) -c src/cli clean
+	@$(MAKE) -C src/daemon clean
+	@$(MAKE) -C src/cli clean
 

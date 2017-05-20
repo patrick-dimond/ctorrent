@@ -10,7 +10,7 @@
 char *socket_path = "/Users/psd/Documents/ctorrent/ctor.sock";
 
 enum command_enum {
-  add,
+  add = 1,
   info,
   stop
 };
@@ -94,13 +94,14 @@ generate_message(char *buf, int argc, char *argv[]) {
 int main(int argc, char *argv[]) {
 
   char buf[1024];
-  char *command;
 
   if (argc < 2) {
     usage();
   }
 
   generate_message(buf, argc, argv);
+
+  printf("%s\n", buf);
 
   struct sockaddr_un addr;
   int fd;

@@ -1,0 +1,3 @@
+[submodule "src/daemon/streaming-bencode"]
+	path = src/daemon/streaming-bencode
+	url = https://github.com/willemt/streaming-bencode

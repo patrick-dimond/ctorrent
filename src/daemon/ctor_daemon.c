@@ -38,26 +38,26 @@ const uint8_t BASE_TEN = 0;
 const mode_t LOG_MODE = S_IWUSR; 
 
 /* handle parsing commands from local socket */
-struct command {
+struct message {
   char buf[1024]; // build the command
-  int32_t comm_len; // reported length
-  int32_t cur_len; // current length
-  uint8_t status; // still handling a command?
-
+  char *torrent_file; // torrent file
+  uint8_t command;
+  int32_t msg_len; // reported length
+  int32_t recv_len; // length received
 };
 
-struct fd_comm {
+struct ud_comm {
 
   struct bufferevent *bufev;
 
-  struct command comm;
+  struct message *msg;
 
   struct event *read_event;
   struct event *write_event;
 
 };
 
-void free_fd_comm(struct fd_comm *);
+void free_ud_comm(struct ud_comm *);
 
 void 
 usage(void) {
@@ -69,30 +69,73 @@ usage(void) {
 
 void 
 local_command(struct bufferevent *bufev, void *ctx) {
-    struct fd_comm *comm = ctx;
-    int32_t n;
+  struct ud_comm *comm = ctx;
+  struct message *msg = comm->msg;
+  int32_t recv;
+  uint32_t comm_offset = 0;
 
-    while ((n = bufferevent_read(bufev, comm->comm.buf, sizeof(comm->comm.buf))) > 0) {
 
-/*      if (comm->comm.status == 0) { // New Command
+  while ((recv = bufferevent_read(bufev, msg->buf + msg->recv_len, 
+          sizeof(msg->buf) - msg->recv_len - 1)) > 0) {
 
-      } else { // part way through getting a command
+    msg->recv_len += recv;
+    msg->buf[msg->recv_len] = '\0';
 
+    printf("total recv: %d\n", msg->recv_len);
+
+    for (uint32_t i = 0; i < msg->recv_len && msg->msg_len == 0; i++) {
+
+      if (msg->buf[i] == ' ') { //got at least the length
+        msg->buf[i] = '\0';
+        msg->msg_len = strtol(msg->buf, NULL, BASE_TEN);
+
+        if (msg->msg_len == 0) {
+          if (errno == EINVAL || errno == ERANGE) {
+            printf("Bad message length\n"); // Reply that it was a bad message
+          }
+        }
 
       }
-*/
-      comm->comm.buf[n] = '\0'; 
+    }   
 
-      printf("%s", comm->comm.buf);
+    if (msg->recv_len == msg->msg_len) { // got whole message
+      
+      for (uint32_t i = 0; i < msg->recv_len; i++) {
 
+        if (msg->buf[i] == '\0') {
+
+          comm_offset = i + 1;
+        }
+
+        else if (msg->buf[i] == ' ') {
+
+          msg->buf[i] = '\0';
+          msg->torrent_file = msg->buf + i + 1;
+
+        }
+      }
+
+      msg->command =  strtol(msg->buf + comm_offset, NULL, BASE_TEN);
+
+      if (msg->command == 0) {
+        if (errno == EINVAL || errno == ERANGE) {
+          printf("Bad Command\n"); // Reply that it was a bad message
+        }
+      }
+
+      printf("%d %d", msg->msg_len, msg->command);
+      if (msg->torrent_file) {
+        printf(" %s", msg->torrent_file);
+      }
+      printf("\n");
     }
-
+  }
 }
 
 void 
 local_event(struct bufferevent *bev, short events, void *ctx) {
 
-    struct fd_comm *comm = ctx;
+    struct ud_comm *comm = ctx;
     int finished = 0;
 
     if (events & BEV_EVENT_EOF) {
@@ -108,21 +151,29 @@ local_event(struct bufferevent *bev, short events, void *ctx) {
       finished = 1;
     }
     if (finished) {
-        free_fd_comm(comm);
+        free_ud_comm(comm);
     }
 }
 
-struct fd_comm *
-alloc_fd_comm(struct event_base *base, evutil_socket_t fd) {
+struct ud_comm *
+alloc_ud_comm(struct event_base *base, evutil_socket_t fd) {
 
-  struct fd_comm *comm = malloc(sizeof(struct fd_comm));
+  struct ud_comm *comm = malloc(sizeof(struct ud_comm));
 
   if (comm == NULL) {
     return NULL;
   }
 
-  comm->comm.status = 0;
-  comm->comm.cur_len = 0;
+  comm->msg = malloc(sizeof(struct message));
+
+  if (comm->msg == NULL) {
+    free(comm);
+    return NULL;
+  }
+
+  comm->msg->recv_len = 0;
+  comm->msg->msg_len = 0;
+  comm->msg->torrent_file = NULL;
 
   comm->bufev = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
 
@@ -140,12 +191,14 @@ alloc_fd_comm(struct event_base *base, evutil_socket_t fd) {
 }
 
 void
-free_fd_comm(struct fd_comm *comm) {
+free_ud_comm(struct ud_comm *comm) {
 
   /* Remove all callbacks to free safely */
   bufferevent_setcb(comm->bufev, NULL, NULL, NULL, NULL);
 
   bufferevent_free(comm->bufev);
+
+  free(comm->msg);
 
   free(comm);
 
@@ -165,9 +218,9 @@ do_accept(evutil_socket_t listener, short event, void *arg) {
     } else if (fd > FD_SETSIZE) {
         evutil_closesocket(fd); // XXX replace all closes with EVUTIL_CLOSESOCKET */
     } else {
-        struct fd_comm *comm;
+        struct ud_comm *comm;
         evutil_make_socket_nonblocking(fd);
-        comm = alloc_fd_comm(base, fd);
+        comm = alloc_ud_comm(base, fd);
     }
 }
 
@@ -188,11 +241,9 @@ run(uint32_t port) {
 
   /* TODO path needs to be read from config */
   strcpy(local.sun_path, "/Users/psd/Documents/ctorrent/ctor.sock");
-  /* Giving an error
   if (unlink(local.sun_path) == -1) {
     err(errno, "unlink");
   }
-  */
 
   len = strnlen(local.sun_path, 108) + sizeof(local.sun_family);
 
@@ -309,4 +360,4 @@ main(int argc, char *argv[]) {
       - better make file
       - clean up all comments
     write tests + a design doc
- */
+ e*/
