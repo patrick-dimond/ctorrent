@@ -1,16 +1,14 @@
-PROG=ctorrent
 CC=gcc
-SRCS=ctorrent.c
-CFLAGS+=-Wall -Werror -levent -Wno-deprecated-declarations
-MAN=
+CFLAGS+=-Wall -Werror 
 
+export CC CFLAGS 
 
-ctorrent:
-	$(CC) $(SRCS) -o $(PROG) $(CFLAGS)
+all: 
+	@$(MAKE) -c src/daemon
+	@$(MAKE) -c src/cli
 
-clean:
-	rm $(PROG)
-
-
-
+.PHONY: clean
+clean:	
+	@$(MAKE) -c src/daemon clean
+	@$(MAKE) -c src/cli clean
 
