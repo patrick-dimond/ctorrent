@@ -1,8 +1,3 @@
-CC=gcc
-CFLAGS+=-Wall -Werror 
-
-export CC CFLAGS 
-
 all: 
 	@$(MAKE) -C src/daemon
 	@$(MAKE) -C src/cli

@@ -26,6 +26,8 @@
 
 #include <fcntl.h>
 
+#include "torrent_reader.h"
+
 
 extern char *optarg;
 extern int optind;
@@ -84,11 +86,9 @@ local_command(struct bufferevent *bufev, void *ctx) {
     printf("total recv: %d\n", msg->recv_len);
 
     for (uint32_t i = 0; i < msg->recv_len && msg->msg_len == 0; i++) {
-
       if (msg->buf[i] == ' ') { //got at least the length
         msg->buf[i] = '\0';
         msg->msg_len = strtol(msg->buf, NULL, BASE_TEN);
-
         if (msg->msg_len == 0) {
           if (errno == EINVAL || errno == ERANGE) {
             printf("Bad message length\n"); // Reply that it was a bad message
@@ -99,16 +99,11 @@ local_command(struct bufferevent *bufev, void *ctx) {
     }   
 
     if (msg->recv_len == msg->msg_len) { // got whole message
-      
       for (uint32_t i = 0; i < msg->recv_len; i++) {
-
         if (msg->buf[i] == '\0') {
-
           comm_offset = i + 1;
         }
-
         else if (msg->buf[i] == ' ') {
-
           msg->buf[i] = '\0';
           msg->torrent_file = msg->buf + i + 1;
 
@@ -126,6 +121,7 @@ local_command(struct bufferevent *bufev, void *ctx) {
       printf("%d %d", msg->msg_len, msg->command);
       if (msg->torrent_file) {
         printf(" %s", msg->torrent_file);
+
       }
       printf("\n");
     }

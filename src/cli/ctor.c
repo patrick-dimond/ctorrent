@@ -9,22 +9,12 @@
 // TODO  Needs to be read from a config file
 char *socket_path = "/Users/psd/Documents/ctorrent/ctor.sock";
 
+// TODO enum should come from shared file - not repeated in client and daemon
 enum command_enum {
   add = 1,
   info,
   stop
 };
-
-/* How messages are generated
- * len command [torrent]
- *
- * len is the total length of the whole message string.
- *
- * command is a number that correseponds to the command enum
- *
- * [torrent] is the name of the torrent file
- *
- */
 
 void
 usage(void) {
@@ -38,46 +28,36 @@ generate_message(char *buf, int argc, char *argv[]) {
 
   char *file = NULL;
   enum command_enum command;
+  uint32_t len = 0;
+
+  if (argc > 2) {
+    file = argv[2];
+    len = strlen(file) + 3;
+  }
+
+  if (len < 9) {
+    len += 1;
+  } else if (len < 98) {
+    len += 2;
+  } else if (len < 997) {
+    len += 3;
+  } else {
+    len +=4;
+  }
 
 
   if (strcmp(argv[1], "add") == 0 && argc == 3) {
-
     command = add;
-    file = argv[2];
-
   } else if (strcmp(argv[1], "info") == 0) {
-  
-    if (argc > 2){
-      file = argv[2];
-    }
     command = info;
-
   } else if (strcmp(argv[1], "stop") == 0) {
-
-    if (argc > 2){
-      file = argv[2];
-    }
     command = stop;
-
   } else {
-
-    printf("%d -  %s\n", argc, argv[1]);
     usage();
   }
 
-  uint32_t len = 0;
   int32_t result;
   if (file) {
-    len = strlen(file) + 3 ;
-    if (len < 9) {
-      len += 1;
-    } else if (len < 98) {
-      len += 2;
-    } else if (len < 997) {
-      len += 3;
-    } else {
-      len += 4;
-    }
     result = snprintf(buf, 1024, "%d %d %s", len, command, file);
     if (result > 1023) {
       printf("Filename too large\n");
@@ -85,8 +65,10 @@ generate_message(char *buf, int argc, char *argv[]) {
     }
   } else {
     len = 3;
-    snprintf(buf, 1024, "%d %d", len, command);
+    result = snprintf(buf, 1024, "%d %d", len, command);
   }
+
+  printf("total length: %d\n", result);
 
   return;
 }
@@ -124,7 +106,7 @@ int main(int argc, char *argv[]) {
   ssize_t written = 0;
   ssize_t recv;
   do {
-    written = write(fd, buf + written, message_length - written);
+    written += write(fd, buf + written, message_length - written);
   
   } while(written < message_length);
 
