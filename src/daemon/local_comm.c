@@ -45,21 +45,10 @@ void ud_response(struct bufferevent *, void*);
 
 void
 ud_response(struct bufferevent *bufev, void *ctx) {
-  struct ud_comm *comm = ctx;
-  char *reply = "Message recv\n";
-  int32_t written = 0;
+  //struct ud_comm *comm = ctx;
 
-  printf("writing?\n");
 
-  written = bufferevent_write(bufev, reply, strlen(reply));
-
-  if (written == -1) {
-    printf("Write unsuccessful\n");
-  } else {
-    printf("Write successful\n");
-  }
-
-  free_ud_comm(comm);
+  printf("Write triggered\n");
 
 }
 
@@ -71,6 +60,8 @@ ud_command(struct bufferevent *bufev, void *ctx) {
   int32_t recv;
   uint32_t comm_offset = 0;
   uint8_t finished = 0;
+
+  printf("read triggered\n");
 
 
   while ((recv = bufferevent_read(bufev, msg->buf + msg->recv_len, 
@@ -126,9 +117,6 @@ ud_command(struct bufferevent *bufev, void *ctx) {
   if (finished == 1 || msg->bad == 1) {
      char *reply = "Message recv\n";
      bufferevent_write(bufev, reply, strlen(reply));
-
-    //bufferevent_enable(comm->bufev, EV_READ | EV_WRITE);
-
   }
 }
 
@@ -183,9 +171,9 @@ alloc_ud_comm(struct event_base *base, evutil_socket_t fd) {
     return NULL;
   }
 
-  bufferevent_setcb(comm->bufev, ud_command, NULL, ud_event, comm);
+  bufferevent_setcb(comm->bufev, ud_command, ud_response, ud_event, comm);
 
-  bufferevent_enable(comm->bufev, EV_READ);
+  bufferevent_enable(comm->bufev, EV_READ | EV_WRITE);
 
   return comm;
 

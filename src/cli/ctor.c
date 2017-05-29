@@ -110,7 +110,7 @@ int main(int argc, char *argv[]) {
   
   } while(written < message_length);
 
-  while( (recv = read(STDIN_FILENO, buf, 1023)) > 0) {
+  while( (recv = read(fd, buf, 1023)) > 0) {
     buf[recv + 1] = '\0';
     printf("%s", buf);
   }
