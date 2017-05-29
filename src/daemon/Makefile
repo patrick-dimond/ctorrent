@@ -25,7 +25,7 @@ INCLUDES = #-I/home/newhall/include  -I../include
 LIBS = -levent #-lmylib -lm
 
 # define the C source files
-SRCS = ctor_daemon.c #torrent_reader.c 
+SRCS = ctor_daemon.c local_comm.c 
 
 # define the C object files 
 #
